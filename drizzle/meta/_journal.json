@@ -8,6 +8,20 @@
       "when": 1785107919675,
       "tag": "0000_faulty_santa_claus",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1785116359392,
+      "tag": "0001_grey_maddog",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785117379084,
+      "tag": "0002_glossy_shotgun",
+      "breakpoints": true
     }
   ]
 }

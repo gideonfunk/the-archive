@@ -1,37 +1,10 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
-
-type Track = {
-  id: string;
-  title: string;
-  artist: string;
-  persona: string;
-  number: string;
-  duration: string;
-  color: string;
-  tags: string[];
-};
-
-const personas = [
-  { name: "All transmissions", short: "ALL", color: "#e8e2d8" },
-  { name: "The War Scroll", short: "WS", color: "#a82a25" },
-  { name: "Echo Gray", short: "EG", color: "#829097" },
-  { name: "Chanokh", short: "CH", color: "#4e735e" },
-  { name: "Instrumental Band", short: "IB", color: "#b46d37" },
-  { name: "Gideon", short: "GD", color: "#c49b42" },
-];
-
-const tracks: Track[] = [
-  { id: "iron-witness", title: "Iron Witness", artist: "The War Scroll", persona: "The War Scroll", number: "001", duration: "03:41", color: "#a82a25", tags: ["prophetic", "industrial", "psalm"] },
-  { id: "salt-memory", title: "Salt Memory", artist: "Echo Gray", persona: "Echo Gray", number: "002", duration: "04:08", color: "#829097", tags: ["nocturne", "ambient", "memory"] },
-  { id: "eastward", title: "Eastward, Still", artist: "Chanokh", persona: "Chanokh", number: "003", duration: "03:26", color: "#4e735e", tags: ["pilgrimage", "folk", "field"] },
-  { id: "rooms-of-brass", title: "Rooms of Brass", artist: "Instrumental Band", persona: "Instrumental Band", number: "004", duration: "05:12", color: "#b46d37", tags: ["ensemble", "cinematic", "brass"] },
-  { id: "the-gold-between", title: "The Gold Between", artist: "Gideon", persona: "Gideon", number: "005", duration: "04:37", color: "#c49b42", tags: ["songwriter", "intimate", "gold"] },
-  { id: "no-king-but-fire", title: "No King but Fire", artist: "The War Scroll", persona: "The War Scroll", number: "006", duration: "02:58", color: "#a82a25", tags: ["manifesto", "distortion", "live"] },
-  { id: "static-coast", title: "Static Coast", artist: "Echo Gray", persona: "Echo Gray", number: "007", duration: "04:44", color: "#829097", tags: ["shoegaze", "tide", "drift"] },
-  { id: "unmetered", title: "Unmetered", artist: "Instrumental Band", persona: "Instrumental Band", number: "008", duration: "06:03", color: "#b46d37", tags: ["improvised", "rhythm", "suite"] },
-];
+import { FormEvent, useEffect, useState } from "react";
+import { useAudioPlayer } from "@/components/AudioPlayer";
+import { getOrCreateAnonymousUserId } from "@/lib/auth";
+import { formatDuration } from "@/lib/utils";
+import type { CatalogData } from "@/lib/types";
 
 function StarRow({ value, onChange, compact = false }: { value: number; onChange: (rating: number) => void; compact?: boolean }) {
   return (
@@ -46,53 +19,90 @@ function StarRow({ value, onChange, compact = false }: { value: number; onChange
 }
 
 export default function Home() {
-  const [filter, setFilter] = useState("All transmissions");
-  const [current, setCurrent] = useState(tracks[0]);
-  const [playing, setPlaying] = useState(false);
-  const [ratings, setRatings] = useState<Record<string, number>>({ "iron-witness": 4 });
-  const [tags, setTags] = useState<Record<string, string[]>>({});
+  const [catalog, setCatalog] = useState<CatalogData | null>(null);
+  const [filter, setFilter] = useState("all");
+  const [ratings, setRatings] = useState<Record<number, number>>({});
+  const [userTags, setUserTags] = useState<Record<number, string[]>>({});
   const [tagDraft, setTagDraft] = useState("");
-  const [progress, setProgress] = useState(21);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const visibleTracks = filter === "All transmissions" ? tracks : tracks.filter((track) => track.persona === filter);
-  const currentTags = [...current.tags, ...(tags[current.id] ?? [])];
+  const [currentTrackId, setCurrentTrackId] = useState<number | null>(null);
+  const { playTrack, currentTrack } = useAudioPlayer();
 
   useEffect(() => {
-    if (playing) {
-      timer.current = setInterval(() => setProgress((value) => (value >= 100 ? 0 : value + 0.25)), 250);
-    }
-    return () => {
-      if (timer.current) clearInterval(timer.current);
-    };
-  }, [playing]);
+    fetch("/api/catalog")
+      .then((res) => {
+        if (!res.ok) throw new Error("Catalog request failed");
+        return res.json() as Promise<CatalogData>;
+      })
+      .then(setCatalog)
+      .catch(console.error);
+  }, []);
 
-  function chooseTrack(track: Track) {
-    setCurrent(track);
-    setProgress(0);
-    setPlaying(true);
-  }
+  const personas = catalog?.personas || [];
+  const allPersonaOption = { name: "All transmissions", slug: "all", primaryColor: "#e8e2d8", sortOrder: -1 };
+  const allPersonas = [allPersonaOption, ...personas];
 
-  async function saveRating(trackId: string, rating: number) {
+  const visibleTracks = catalog?.tracks.filter(
+    (track) => filter === "all" || track.personaSlug === filter
+  ) || [];
+
+  const currentTrackData = visibleTracks.find((t) => t.id === currentTrackId) || visibleTracks[0];
+
+  const currentTags = currentTrackData
+    ? [
+        ...(currentTrackData.curatorTags?.split(";").filter(Boolean) || []),
+        ...(userTags[currentTrackData.id] || []),
+      ]
+    : [];
+
+  async function saveRating(trackId: number, rating: number) {
+    const userId = getOrCreateAnonymousUserId();
+    if (!userId) return;
     setRatings((state) => ({ ...state, [trackId]: rating }));
-    fetch("/api/engagement", {
+    fetch("/api/ratings", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ trackId, rating, deviceId: "browser-device" }),
+      body: JSON.stringify({ trackId, userId, rating }),
     }).catch(() => undefined);
   }
 
-  function addTag(event: FormEvent) {
+  async function addTag(event: FormEvent) {
     event.preventDefault();
+    if (!currentTrackData) return;
+    const userId = getOrCreateAnonymousUserId();
+    if (!userId) return;
+
     const clean = tagDraft.trim().replace(/^#/, "").toLowerCase();
     if (!clean || currentTags.includes(clean)) return;
-    setTags((state) => ({ ...state, [current.id]: [...(state[current.id] ?? []), clean] }));
+
+    setUserTags((state) => ({
+      ...state,
+      [currentTrackData.id]: [...(state[currentTrackData.id] || []), clean],
+    }));
     setTagDraft("");
-    fetch("/api/engagement", {
+
+    fetch("/api/tags", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ trackId: current.id, tag: clean, deviceId: "browser-device" }),
+      body: JSON.stringify({ trackId: currentTrackData.id, userId, tag: clean }),
     }).catch(() => undefined);
+  }
+
+  function chooseTrack(track: typeof visibleTracks[0]) {
+    setCurrentTrackId(track.id);
+    if (!track.publicUrl) return;
+    playTrack({
+      id: track.id,
+      title: track.title,
+      personaName: track.personaName,
+      personaColor: track.personaColor,
+      publicUrl: track.publicUrl,
+      duration: track.duration,
+      versionId: track.versionId,
+    });
+  }
+
+  if (!catalog) {
+    return <main><div className="loading">Loading archive...</div></main>;
   }
 
   return (
@@ -105,15 +115,24 @@ export default function Home() {
           <span>INDEPENDENT TRANSMISSIONS</span>
           <span>VOL. 01 / 2026</span>
         </div>
-        <button className="about-button" type="button" onClick={() => document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })}>
+        <button
+          className="about-button"
+          type="button"
+          onClick={() => document.getElementById("about")?.scrollIntoView({ behavior: "smooth" })}
+        >
           ABOUT ↘
         </button>
       </header>
 
       <section className="hero" id="top">
         <div className="hero-index">A—001</div>
-        <h1>FIVE VOICES.<br /><em>ONE</em> SIGNAL.</h1>
-        <p>A living archive of songs, sketches, and sonic artifacts by Gideon Funk. Choose a frequency. Leave a trace.</p>
+        <h1>
+          FIVE VOICES.<br />
+          <em>ONE</em> SIGNAL.
+        </h1>
+        <p>
+          A living archive of songs, sketches, and sonic artifacts by Gideon Funk. Choose a frequency. Leave a trace.
+        </p>
         <div className="hero-mark" aria-hidden="true">
           <span>5</span>
           <div />
@@ -121,15 +140,15 @@ export default function Home() {
       </section>
 
       <nav className="persona-nav" aria-label="Filter tracks by persona">
-        {personas.map((persona) => (
+        {allPersonas.map((persona) => (
           <button
-            key={persona.name}
-            className={filter === persona.name ? "active" : ""}
-            onClick={() => setFilter(persona.name)}
-            style={{ "--persona": persona.color } as React.CSSProperties}
+            key={persona.slug}
+            className={filter === persona.slug ? "active" : ""}
+            onClick={() => setFilter(persona.slug)}
+            style={{ "--persona": persona.primaryColor } as React.CSSProperties}
             type="button"
           >
-            <span>{persona.short}</span>
+            <span>{persona.name.split(" ").map((w) => w[0]).join("")}</span>
             {persona.name}
           </button>
         ))}
@@ -139,70 +158,125 @@ export default function Home() {
         <div className="section-heading">
           <div>
             <span>THE CURRENT</span>
-            <h2>RECENT<br />TRANSMISSIONS</h2>
+            <h2>
+              RECENT<br />
+              TRANSMISSIONS
+            </h2>
           </div>
-          <p>{String(visibleTracks.length).padStart(2, "0")} ARTIFACTS<br />UPDATED WEEKLY</p>
+          <p>
+            {String(visibleTracks.length).padStart(2, "0")} ARTIFACTS<br />
+            UPDATED WEEKLY
+          </p>
         </div>
 
         <div className="track-list">
           {visibleTracks.map((track) => (
-            <article className={`track-row ${current.id === track.id ? "selected" : ""}`} key={track.id}>
-              <button className="track-main" type="button" onClick={() => chooseTrack(track)} aria-label={`Play ${track.title} by ${track.artist}`}>
-                <span className="track-number">{track.number}</span>
-                <span className="cover" style={{ background: track.color }}><i>{track.artist.split(" ").map((word) => word[0]).join("").slice(0, 2)}</i></span>
+            <article
+              className={`track-row ${currentTrack?.id === track.id ? "selected" : ""}`}
+              key={track.id}
+            >
+              <button
+                className="track-main"
+                type="button"
+                onClick={() => chooseTrack(track)}
+                aria-label={`Play ${track.title} by ${track.personaName}`}
+              >
+                <span className="track-number">{track.trackId?.split("-").pop() || "—"}</span>
+                <span className="cover" style={{ background: track.personaColor }}>
+                  <i>{track.personaName.split(" ").map((word) => word[0]).join("").slice(0, 2)}</i>
+                </span>
                 <span className="track-copy">
                   <strong>{track.title}</strong>
-                  <small>{track.artist}</small>
+                  <small>{track.personaName}</small>
                 </span>
               </button>
-              <div className="track-tags">{track.tags.slice(0, 2).map((tag) => <span key={tag}>#{tag}</span>)}</div>
-              <StarRow compact value={ratings[track.id] ?? 0} onChange={(rating) => saveRating(track.id, rating)} />
-              <time>{track.duration}</time>
-              <button className="row-play" type="button" onClick={() => chooseTrack(track)} aria-label={`Play ${track.title}`}>{current.id === track.id && playing ? "Ⅱ" : "▶"}</button>
+              <div className="track-tags">
+                {track.curatorTags?.split(";").slice(0, 2).filter(Boolean).map((tag) => (
+                  <span key={tag}>#{tag}</span>
+                ))}
+              </div>
+              <StarRow
+                compact
+                value={ratings[track.id] ?? 0}
+                onChange={(rating) => saveRating(track.id, rating)}
+              />
+              <time>{track.duration ? formatDuration(track.duration) : "--:--"}</time>
+              <button
+                className="row-play"
+                type="button"
+                onClick={() => chooseTrack(track)}
+                aria-label={`Play ${track.title}`}
+              >
+                {currentTrack?.id === track.id ? "Ⅱ" : "▶"}
+              </button>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="trace-section" id="about">
-        <div className="trace-copy">
-          <span>LISTENING IS PARTICIPATION</span>
-          <h2>LEAVE<br />A TRACE.</h2>
-          <p>No account. No feed. Rate what moves you and add a word to the collective index. Every response becomes part of the archive.</p>
-        </div>
-        <div className="trace-panel">
-          <div className="mini-cover" style={{ background: current.color }}><span>{current.number}</span><b>{current.artist}</b></div>
-          <div className="trace-controls">
-            <span>NOW INDEXING</span>
-            <h3>{current.title}</h3>
-            <p>{current.artist}</p>
-            <label>Your signal</label>
-            <StarRow value={ratings[current.id] ?? 0} onChange={(rating) => saveRating(current.id, rating)} />
-            <label>Tag this artifact</label>
-            <form onSubmit={addTag}>
-              <input value={tagDraft} onChange={(event) => setTagDraft(event.target.value)} placeholder="one word..." aria-label="Add a tag" maxLength={24} />
-              <button type="submit" aria-label="Add tag">＋</button>
-            </form>
-            <div className="tag-cloud">{currentTags.map((tag) => <span key={tag}>#{tag}</span>)}</div>
+      {currentTrackData && (
+        <section className="trace-section" id="about">
+          <div className="trace-copy">
+            <span>LISTENING IS PARTICIPATION</span>
+            <h2>
+              LEAVE<br />
+              A TRACE.
+            </h2>
+            <p>
+              No account. No feed. Rate what moves you and add a word to the collective index. Every response becomes part of the archive.
+            </p>
           </div>
-        </div>
-      </section>
+          <div className="trace-panel">
+            <div className="mini-cover" style={{ background: currentTrackData.personaColor }}>
+              <span>{currentTrackData.trackId?.split("-").pop() || "—"}</span>
+              <b>{currentTrackData.personaName}</b>
+            </div>
+            <div className="trace-controls">
+              <span>NOW INDEXING</span>
+              <h3>{currentTrackData.title}</h3>
+              <p>{currentTrackData.personaName}</p>
+              <label>Your signal</label>
+              <StarRow
+                value={ratings[currentTrackData.id] ?? 0}
+                onChange={(rating) => saveRating(currentTrackData.id, rating)}
+              />
+              <label>Tag this artifact</label>
+              <form onSubmit={addTag}>
+                <input
+                  value={tagDraft}
+                  onChange={(event) => setTagDraft(event.target.value)}
+                  placeholder="one word..."
+                  aria-label="Add a tag"
+                  maxLength={24}
+                />
+                <button type="submit" aria-label="Add tag">
+                  ＋
+                </button>
+              </form>
+              <div className="tag-cloud">
+                {currentTags.map((tag) => (
+                  <span key={tag}>#{tag}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       <footer>
-        <div className="footer-brand">THE<br /><span>ARCHIVE</span></div>
-        <p>Five evolving bodies of work.<br />One independent signal.</p>
-        <div className="footer-meta"><span>© 2026 GIDEON FUNK</span><span>VANCOUVER, BC</span></div>
+        <div className="footer-brand">
+          THE<br />
+          <span>ARCHIVE</span>
+        </div>
+        <p>
+          Five evolving bodies of work.<br />
+          One independent signal.
+        </p>
+        <div className="footer-meta">
+          <span>© 2026 GIDEON FUNK</span>
+          <span>VANCOUVER, BC</span>
+        </div>
       </footer>
-
-      <aside className="player" aria-label="Now playing">
-        <button className="player-cover" style={{ background: current.color }} type="button" onClick={() => setPlaying(!playing)}>{playing ? "Ⅱ" : "▶"}</button>
-        <div className="player-title"><strong>{current.title}</strong><span>{current.artist}</span></div>
-        <button className="skip" type="button" onClick={() => setProgress(Math.max(0, progress - 10))} aria-label="Back ten seconds">−10</button>
-        <button className="main-play" type="button" onClick={() => setPlaying(!playing)} aria-label={playing ? "Pause" : "Play"}>{playing ? "Ⅱ" : "▶"}</button>
-        <button className="skip" type="button" onClick={() => setProgress(Math.min(100, progress + 10))} aria-label="Forward ten seconds">+10</button>
-        <div className="timeline"><span style={{ width: `${progress}%`, background: current.color }} /></div>
-        <span className="elapsed">{Math.floor(progress * 0.026)}:{String(Math.floor((progress * 1.73) % 60)).padStart(2, "0")} / {current.duration}</span>
-      </aside>
     </main>
   );
 }

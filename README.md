@@ -1,98 +1,63 @@
-# vinext-starter
+# The Archive
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+A mobile-first music curation service for five Gideon Funk artist personas:
 
-## Prerequisites
+- The War Scroll
+- Echo Gray
+- Chanokh
+- Instrumental Band
+- Gideon
 
-- Node.js `>=22.13.0`
+Listeners can browse the public catalog, play R2-hosted audio, rate tracks, submit moderated tags, and enter campaigns through stable QR links. Identity is a random browser-local UUID; there are no listener accounts or fingerprints.
 
-## Quick Start
+## Architecture
+
+- **Application:** Next.js 16 API surface on experimental vinext/Vite
+- **Runtime and Git deployment:** Cloudflare Workers and Workers Builds
+- **Database:** Cloudflare D1 with Drizzle ORM
+- **Media:** Cloudflare R2
+- **Identity:** browser-local UUID
+
+Cloudflare Pages is not the deployment target. This is a full-stack application with API and D1 routes, so it requires the Workers runtime.
+
+## Local setup
 
 ```bash
-npm install
+npm ci
 npm run dev
-npm run build
 ```
 
-This starter does not use `wrangler.jsonc`.
+The local vinext server supplies a local D1 binding based on `.openai/hosting.json`. Apply migrations to the local database before testing catalog behavior.
 
-## Included Shape
+## Quality checks
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-OpenAI workspace sites can read the current user's email from
-`oai-authenticated-user-email`.
-
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
+```bash
+npm run check
+npm run lint
+npm run typecheck
+npm test
 ```
 
-## Optional Dispatch-Owned ChatGPT Sign-In
+## Database
 
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs
-optional or required ChatGPT sign-in:
+The schema has 14 tables in [db/schema.ts](db/schema.ts). Drizzle migrations are committed under [drizzle](drizzle), and [db/seed.sql](db/seed.sql) provides an idempotent initial catalog seed.
 
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send
-  anonymous visitors through Sign in with ChatGPT.
-- Use `chatGPTSignInPath(returnTo)` and `chatGPTSignOutPath(returnTo)` for
-  browser links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in
-  or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because
-  they depend on per-request identity headers.
+Create a new migration after a schema change:
 
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the
-OAuth cookies, and identity header injection. Do not implement app routes for
-those reserved paths. Routes that do not import and call the helper remain
-anonymous-compatible.
+```bash
+npm run db:generate
+```
 
-SIWC establishes identity only; it does not prove workspace membership. Use the
-Sites hosting platform's access policy controls for workspace-wide restrictions,
-or enforce explicit server-side membership or allowlist checks.
+Never edit an already-applied migration. Review generated SQL before committing it.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## Deployment
 
-## Useful Commands
+See [DEPLOYMENT.md](DEPLOYMENT.md) for D1/R2 provisioning, migrations, media CORS, GitHub integration, Workers Builds, and post-deployment checks.
 
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+## Important limitations
 
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+- vinext describes itself as experimental and should be upgraded cautiously.
+- Browser-local identity deters casual duplicates but is not strong authentication.
+- Rate limits tied only to the anonymous UUID can be bypassed by clearing browser storage.
+- Placeholder catalog versions have no audio URL and remain private until real web derivatives are uploaded.
+- Tag moderation and play-event retention are operational tasks that still need a curator workflow.
