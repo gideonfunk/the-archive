@@ -1,4 +1,4 @@
-import type { PersonaCatalogItem, TrackCatalogItem } from "@/lib/types";
+import type { CatalogData, PersonaCatalogItem, TrackCatalogItem } from "@/lib/types";
 
 export const featuredPersonas: PersonaCatalogItem[] = [
   { id: 1, name: "The War Scroll", slug: "the-war-scroll", primaryColor: "#8B0000", description: "Warfare worship and prayer-warrior devotional music.", theologicalStatement: "Isaiah 59:19; Psalm 57:8; Psalm 91:1; Revelation 12:11", sortOrder: 1 },
@@ -53,3 +53,10 @@ export const featuredTracks: TrackCatalogItem[] = [
   track(4, "Soft Heart, Holy Fire", "soft-heart-holy-fire"),
   track(5, "Keeper of the Heart", "keeper-of-the-heart"),
 ];
+
+export const featuredCatalog: CatalogData = {
+  personas: featuredPersonas,
+  tracks: featuredTracks,
+  releases: [],
+  artwork: [],
+};

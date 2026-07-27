@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useAudioPlayer } from "@/components/AudioPlayer";
 import { getOrCreateAnonymousUserId } from "@/lib/auth";
 import { formatDuration } from "@/lib/utils";
+import { featuredCatalog } from "@/lib/featured-catalog";
 import type { CatalogData } from "@/lib/types";
 
 function StarRow({ value, onChange, compact = false }: { value: number; onChange: (rating: number) => void; compact?: boolean }) {
@@ -41,11 +42,12 @@ export default function Home() {
         return res.json() as Promise<CatalogData>;
       })
       .then((data) => {
-        setCatalog(data);
+        const catalogData = data.tracks.length > 0 ? data : featuredCatalog;
+        setCatalog(catalogData);
         // Extract user preferences from tracks
         const prefs: Record<number, { favorite: boolean; vote: number }> = {};
         const userRatings: Record<number, number> = {};
-        data.tracks.forEach((track) => {
+        catalogData.tracks.forEach((track) => {
           if (track.favorite !== undefined || track.vote !== undefined) {
             prefs[track.id] = { favorite: track.favorite, vote: track.vote };
           }
