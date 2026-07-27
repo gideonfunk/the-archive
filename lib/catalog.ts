@@ -14,6 +14,7 @@ import {
   playEvents,
 } from "@/db/schema";
 import type { ApprovedTag, CatalogData, TrackCatalogItem, ReleaseCatalogItem } from "@/lib/types";
+import { featuredPersonas, featuredTracks } from "@/lib/featured-catalog";
 
 type CatalogFilters = {
   personaSlug?: string | null;
@@ -25,7 +26,7 @@ type CatalogFilters = {
 
 export async function getCatalog(filters: CatalogFilters = {}): Promise<CatalogData> {
   const db = getDb();
-  const allPersonas = await db
+  let allPersonas = await db
     .select({
       id: personas.id,
       name: personas.name,
@@ -76,6 +77,18 @@ export async function getCatalog(filters: CatalogFilters = {}): Promise<CatalogD
     .innerJoin(personas, eq(tracks.personaId, personas.id))
     .innerJoin(trackVersions, eq(tracks.id, trackVersions.trackId))
     .where(and(...trackConditions));
+
+  // Ship the approved launch tracks even before the full D1 catalog is imported.
+  // The static public files are bundled with the site; D1 remains the source for
+  // the complete catalog and all community interaction data.
+  if (allPersonas.length === 0) allPersonas = featuredPersonas;
+  if (allTracks.length === 0) {
+    const fallbackTracks = featuredTracks.filter((track) =>
+      (!selectedPersona || track.personaSlug === selectedPersona.slug) &&
+      (!filters.trackSlug || track.slug === filters.trackSlug),
+    );
+    allTracks = fallbackTracks as typeof allTracks;
+  }
 
   // Get aggregate metrics for all tracks
   const aggregateMetrics = await Promise.all(
