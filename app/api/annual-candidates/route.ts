@@ -8,6 +8,17 @@ export const dynamic = 'force-dynamic';
 // GET /api/annual-candidates?year=<yyyy> - Get curator-only annual candidate report
 export async function GET(request: NextRequest) {
   try {
+    // Curator authorization check
+    const authHeader = request.headers.get('authorization');
+    const curatorToken = process.env.CURATOR_API_TOKEN;
+    
+    if (!curatorToken || authHeader !== `Bearer ${curatorToken}`) {
+      return NextResponse.json(
+        { error: 'Unauthorized - curator access required' },
+        { status: 401 }
+      );
+    }
+
     const db = getDb();
     const searchParams = request.nextUrl.searchParams;
     const year = searchParams.get('year');

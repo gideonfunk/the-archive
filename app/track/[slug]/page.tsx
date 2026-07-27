@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TrackExperience } from "@/components/TrackExperience";
 import { getApprovedTags, getCatalog } from "@/lib/catalog";
+import { getTrackLyrics } from "@/lib/lyrics";
 import { formatDuration } from "@/lib/utils";
 
 type PageProps = { params: Promise<{ slug: string }> };
@@ -51,11 +52,8 @@ export default async function TrackPage({ params }: PageProps) {
   if (!track) notFound();
   const approvedTags = await getApprovedTags(track.id);
 
-  // Fetch lyrics
-  const lyricsResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/lyrics?trackId=${track.id}`, {
-    cache: 'no-store',
-  });
-  const lyricsData: { lyrics: Array<{ id: number; plainText?: string }> | null; message?: string } = lyricsResponse.ok ? await lyricsResponse.json() : { lyrics: null, message: 'Lyrics are not published for this track yet.' };
+  // Fetch lyrics server-side
+  const lyricsData = await getTrackLyrics(track.id);
 
   return (
     <main>
@@ -80,7 +78,7 @@ export default async function TrackPage({ params }: PageProps) {
       {lyricsData.lyrics && lyricsData.lyrics.length > 0 ? (
         <section className="track-lyrics">
           <h3>Lyrics</h3>
-          {lyricsData.lyrics.map((lyric: { id: number; plainText?: string }) => (
+          {lyricsData.lyrics.map((lyric: { id: number; plainText: string | null }) => (
             <div key={lyric.id} className="lyric-block">
               {lyric.plainText && (
                 <div className="lyric-text">

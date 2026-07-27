@@ -4,7 +4,7 @@ import { useAudioPlayer } from './AudioPlayer';
 import { formatDuration } from '@/lib/utils';
 
 export function PlayerBar() {
-  const { currentTrack, isPlaying, progress, currentTime, error, togglePlay, seekPercent, skipSeconds, nextTrack, previousTrack, queue } = useAudioPlayer();
+  const { currentTrack, isPlaying, progress, currentTime, error, togglePlay, seekPercent, skipSeconds, nextTrack, previousTrack, queue, isShuffled, toggleShuffle } = useAudioPlayer();
 
   if (!currentTrack) return null;
 
@@ -80,6 +80,15 @@ export function PlayerBar() {
         aria-label="Forward ten seconds"
       >
         +10
+      </button>
+      <button
+        className={`shuffle-btn ${isShuffled ? 'active' : ''}`}
+        type="button"
+        onClick={toggleShuffle}
+        disabled={queue.length === 0}
+        aria-label={isShuffled ? 'Disable shuffle' : 'Enable shuffle'}
+      >
+        {isShuffled ? '↔' : '⇄'}
       </button>
       <div
         className="timeline"
