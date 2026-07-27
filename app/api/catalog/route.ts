@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
       personaSlug: searchParams.get("persona"),
       releaseSlug: searchParams.get("release"),
       trackSlug: searchParams.get("track"),
+      view: (searchParams.get("view") as "all" | "top" | null) || null,
+      userId: searchParams.get("userId"),
     });
     return NextResponse.json(catalog);
   } catch (error) {

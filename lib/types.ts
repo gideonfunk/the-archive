@@ -25,6 +25,26 @@ export type TrackCatalogItem = {
   version: string;
   duration: number | null;
   publicUrl: string | null;
+  publishedAt: string | null;
+  // Download and license fields
+  downloadEnabled: boolean;
+  downloadUrl: string | null;
+  downloadFormat: string | null;
+  downloadSizeBytes: number | null;
+  license: string | null;
+  // Aggregate metrics
+  favoriteCount: number;
+  thumbsUp: number;
+  thumbsDown: number;
+  avgRating: number | null;
+  ratingCount: number;
+  qualifiedPlays: number;
+  // User preferences (if userId provided)
+  favorite: boolean;
+  vote: number;
+  rating?: number;
+  // Computed ranking score
+  editorialScore: number;
 };
 
 export type ReleaseCatalogItem = {

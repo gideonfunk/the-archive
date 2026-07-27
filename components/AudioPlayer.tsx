@@ -20,11 +20,18 @@ type PlayerState = {
   currentTime: number;
   volume: number;
   error: string | null;
+  queue: PlayerTrack[];
+  queueIndex: number;
+  isShuffled: boolean;
 };
 
 type PlayerContextType = PlayerState & {
   playTrack: (track: PlayerTrack) => void;
+  playQueue: (tracks: PlayerTrack[], startIndex?: number) => void;
+  shuffleQueue: (tracks: PlayerTrack[]) => void;
   togglePlay: () => void;
+  nextTrack: () => void;
+  previousTrack: () => void;
   seekPercent: (percent: number) => void;
   skipSeconds: (seconds: number) => void;
   setVolume: (volume: number) => void;
@@ -42,6 +49,9 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     currentTime: 0,
     volume: 1,
     error: null,
+    queue: [],
+    queueIndex: 0,
+    isShuffled: false,
   });
 
   useEffect(() => {
@@ -61,6 +71,17 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     const handleEnded = () => {
       updateProgress();
       setState((previous) => ({ ...previous, isPlaying: false, progress: 100 }));
+      // Auto-advance to next track in queue
+      if (previous.queue.length > 0 && previous.queueIndex < previous.queue.length - 1) {
+        setState((previous) => ({
+          ...previous,
+          queueIndex: previous.queueIndex + 1,
+          currentTrack: previous.queue[previous.queueIndex + 1],
+          isPlaying: true,
+          progress: 0,
+          currentTime: 0,
+        }));
+      }
     };
     const handleError = () => {
       setState((previous) => ({
@@ -147,6 +168,82 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       progress: 0,
       currentTime: 0,
       error: null,
+      queue: [track],
+      queueIndex: 0,
+    }));
+  }
+
+  function playQueue(tracks: PlayerTrack[], startIndex = 0) {
+    if (tracks.length === 0) return;
+    const track = tracks[startIndex];
+    if (!track.publicUrl) {
+      setState((previous) => ({
+        ...previous,
+        currentTrack: track,
+        isPlaying: false,
+        error: "Audio is not available for this track yet.",
+      }));
+      return;
+    }
+    setState((previous) => ({
+      ...previous,
+      currentTrack: track,
+      isPlaying: true,
+      progress: 0,
+      currentTime: 0,
+      error: null,
+      queue: tracks,
+      queueIndex: startIndex,
+      isShuffled: false,
+    }));
+  }
+
+  function shuffleQueue(tracks: PlayerTrack[]) {
+    if (tracks.length === 0) return;
+    const shuffled = [...tracks].sort(() => Math.random() - 0.5);
+    // Avoid repeating the immediately previous track if possible
+    if (state.currentTrack && shuffled.length > 1) {
+      const currentIndex = shuffled.findIndex((t) => t.id === state.currentTrack?.id);
+      if (currentIndex === 0) {
+        [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
+      }
+    }
+    setState((previous) => ({
+      ...previous,
+      queue: shuffled,
+      queueIndex: 0,
+      isShuffled: true,
+    }));
+    playTrack(shuffled[0]);
+  }
+
+  function nextTrack() {
+    if (state.queue.length === 0) return;
+    const nextIndex = (state.queueIndex + 1) % state.queue.length;
+    const nextTrack = state.queue[nextIndex];
+    setState((previous) => ({
+      ...previous,
+      currentTrack: nextTrack,
+      queueIndex: nextIndex,
+      isPlaying: true,
+      progress: 0,
+      currentTime: 0,
+      error: null,
+    }));
+  }
+
+  function previousTrack() {
+    if (state.queue.length === 0) return;
+    const prevIndex = state.queueIndex === 0 ? state.queue.length - 1 : state.queueIndex - 1;
+    const prevTrack = state.queue[prevIndex];
+    setState((previous) => ({
+      ...previous,
+      currentTrack: prevTrack,
+      queueIndex: prevIndex,
+      isPlaying: true,
+      progress: 0,
+      currentTime: 0,
+      error: null,
     }));
   }
 
@@ -175,7 +272,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
 
   return (
     <AudioPlayerContext.Provider
-      value={{ ...state, playTrack, togglePlay, seekPercent, skipSeconds, setVolume }}
+      value={{ ...state, playTrack, playQueue, shuffleQueue, togglePlay, nextTrack, previousTrack, seekPercent, skipSeconds, setVolume }}
     >
       {children}
     </AudioPlayerContext.Provider>

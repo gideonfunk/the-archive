@@ -52,6 +52,8 @@ export const tracks = sqliteTable("tracks", {
   curatorTags: text("curator_tags"), // semicolon-separated
   scriptureReferences: text("scripture_references"), // semicolon-separated
   rightsNote: text("rights_note").notNull(),
+  attributionText: text("attribution_text"), // For CC license attribution
+  publishedAt: text("published_at"), // When first made public
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
@@ -82,6 +84,11 @@ export const trackVersions = sqliteTable("track_versions", {
   objectKey: text("object_key"), // R2 key
   publicUrl: text("public_url"),
   isPublic: integer("is_public", { mode: "boolean" }).notNull().default(false),
+  downloadEnabled: integer("download_enabled", { mode: "boolean" }).notNull().default(false),
+  downloadUrl: text("download_url"),
+  downloadFormat: text("download_format"), // mp3, flac, wav
+  downloadSizeBytes: integer("download_size_bytes"),
+  license: text("license"), // CC BY-NC-SA 4.0, CC BY-NC-ND 4.0, All rights reserved
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -153,6 +160,20 @@ export const trackRatings = sqliteTable("track_ratings", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [uniqueIndex("track_ratings_track_user_idx").on(table.trackId, table.userId)]);
+
+// Track preferences - Favorites and votes per anonymous user per track
+export const trackPreferences = sqliteTable("track_preferences", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trackId: integer("track_id").notNull().references(() => tracks.id),
+  userId: text("user_id").notNull().references(() => anonymousUsers.id),
+  favorite: integer("favorite", { mode: "boolean" }).notNull().default(false),
+  vote: integer("vote").notNull().default(0), // -1 (down), 0 (none), 1 (up)
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, (table) => [
+  uniqueIndex("track_preferences_track_user_idx").on(table.trackId, table.userId),
+  index("track_preferences_user_favorite_idx").on(table.userId, table.favorite),
+]);
 
 // Play events - Short-retention qualified playback events
 export const playEvents = sqliteTable("play_events", {

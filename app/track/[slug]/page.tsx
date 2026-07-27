@@ -15,9 +15,34 @@ async function getTrack(slug: string) {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const track = await getTrack((await params).slug);
   if (!track) return { title: "Track Not Found" };
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || '';
+  const trackUrl = `${siteUrl}/track/${track.slug}`;
+  
   return {
     title: `${track.title} — ${track.personaName} — The Archive`,
-    description: `Listen to ${track.title} by ${track.personaName}.`,
+    description: `Listen to ${track.title} by ${track.personaName}. ${track.genre ? `${track.genre}.` : ''}`,
+    openGraph: {
+      title: `${track.title} — ${track.personaName}`,
+      description: `Listen to ${track.title} by ${track.personaName}.`,
+      url: trackUrl,
+      siteName: 'The Archive',
+      type: 'music.song',
+      audio: track.publicUrl ? track.publicUrl : undefined,
+      images: [
+        {
+          url: `${siteUrl}/og/track/${track.slug}`,
+          width: 1200,
+          height: 630,
+          alt: `${track.title} by ${track.personaName}`,
+        },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: `${track.title} — ${track.personaName}`,
+      description: `Listen to ${track.title} by ${track.personaName}.`,
+      images: [`${siteUrl}/og/track/${track.slug}`],
+    },
   };
 }
 
@@ -25,6 +50,12 @@ export default async function TrackPage({ params }: PageProps) {
   const track = await getTrack((await params).slug);
   if (!track) notFound();
   const approvedTags = await getApprovedTags(track.id);
+
+  // Fetch lyrics
+  const lyricsResponse = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/lyrics?trackId=${track.id}`, {
+    cache: 'no-store',
+  });
+  const lyricsData: { lyrics: Array<{ id: number; plainText?: string }> | null; message?: string } = lyricsResponse.ok ? await lyricsResponse.json() : { lyrics: null, message: 'Lyrics are not published for this track yet.' };
 
   return (
     <main>
@@ -46,6 +77,27 @@ export default async function TrackPage({ params }: PageProps) {
         </div>
       </section>
       <TrackExperience track={track} approvedTags={approvedTags} />
+      {lyricsData.lyrics && lyricsData.lyrics.length > 0 ? (
+        <section className="track-lyrics">
+          <h3>Lyrics</h3>
+          {lyricsData.lyrics.map((lyric: { id: number; plainText?: string }) => (
+            <div key={lyric.id} className="lyric-block">
+              {lyric.plainText && (
+                <div className="lyric-text">
+                  {lyric.plainText.split('\n').map((line: string, i: number) => (
+                    <p key={i}>{line}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
+      ) : (
+        <section className="track-lyrics">
+          <h3>Lyrics</h3>
+          <p className="lyrics-unavailable">{lyricsData.message}</p>
+        </section>
+      )}
       {track.scriptureReferences && (
         <section className="track-scripture">
           <h3>Scripture</h3>

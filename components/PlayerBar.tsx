@@ -4,7 +4,7 @@ import { useAudioPlayer } from './AudioPlayer';
 import { formatDuration } from '@/lib/utils';
 
 export function PlayerBar() {
-  const { currentTrack, isPlaying, progress, currentTime, error, togglePlay, seekPercent, skipSeconds } = useAudioPlayer();
+  const { currentTrack, isPlaying, progress, currentTime, error, togglePlay, seekPercent, skipSeconds, nextTrack, previousTrack, queue } = useAudioPlayer();
 
   if (!currentTrack) return null;
 
@@ -48,12 +48,30 @@ export function PlayerBar() {
         −10
       </button>
       <button
+        className="nav-btn"
+        type="button"
+        onClick={previousTrack}
+        disabled={queue.length === 0}
+        aria-label="Previous track"
+      >
+        ◀◀
+      </button>
+      <button
         className="main-play"
         type="button"
         onClick={togglePlay}
         aria-label={isPlaying ? 'Pause' : 'Play'}
       >
         {isPlaying ? 'Ⅱ' : '▶'}
+      </button>
+      <button
+        className="nav-btn"
+        type="button"
+        onClick={nextTrack}
+        disabled={queue.length === 0}
+        aria-label="Next track"
+      >
+        ▶▶
       </button>
       <button
         className="skip"

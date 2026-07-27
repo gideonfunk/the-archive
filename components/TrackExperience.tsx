@@ -16,12 +16,22 @@ export function TrackExperience({
   const [rating, setRating] = useState(0);
   const [tag, setTag] = useState("");
   const [message, setMessage] = useState("");
+  const [favorite, setFavorite] = useState(false);
+  const [vote, setVote] = useState(0);
 
   useEffect(() => {
     const id = getOrCreateAnonymousUserId();
     fetch(`/api/ratings?trackId=${track.id}&userId=${encodeURIComponent(id)}`)
       .then((response) => response.json() as Promise<{ rating?: number | null }>)
       .then((data) => setRating(data.rating ?? 0))
+      .catch(() => undefined);
+    
+    fetch(`/api/preferences?trackId=${track.id}&userId=${encodeURIComponent(id)}`)
+      .then((response) => response.json() as Promise<{ favorite?: boolean; vote?: number }>)
+      .then((data) => {
+        setFavorite(data.favorite ?? false);
+        setVote(data.vote ?? 0);
+      })
       .catch(() => undefined);
   }, [track.id]);
 
@@ -35,6 +45,29 @@ export function TrackExperience({
       body: JSON.stringify({ trackId: track.id, userId, rating: value }),
     });
     setMessage(response.ok ? "Rating saved." : "Rating could not be saved.");
+  }
+
+  async function toggleFavorite() {
+    const userId = getOrCreateAnonymousUserId();
+    if (!userId) return;
+    const newFavorite = !favorite;
+    setFavorite(newFavorite);
+    await fetch("/api/preferences", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trackId: track.id, userId, favorite: newFavorite }),
+    });
+  }
+
+  async function setVoteValue(value: number) {
+    const userId = getOrCreateAnonymousUserId();
+    if (!userId) return;
+    setVote(value);
+    await fetch("/api/preferences", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trackId: track.id, userId, vote: value }),
+    });
   }
 
   async function submitTag(event: FormEvent) {
@@ -97,6 +130,32 @@ export function TrackExperience({
         <div className="engagement-panel">
           <h3>Your Signal</h3>
           <p>Rate this track and add a tag to leave your trace in the archive.</p>
+          <div className="track-actions">
+            <button
+              type="button"
+              className={`action-btn favorite ${favorite ? "active" : ""}`}
+              onClick={toggleFavorite}
+              aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+            >
+              ♥ {favorite ? "Favorited" : "Favorite"}
+            </button>
+            <button
+              type="button"
+              className={`action-btn vote-up ${vote === 1 ? "active" : ""}`}
+              onClick={() => setVoteValue(vote === 1 ? 0 : 1)}
+              aria-label="Thumbs up"
+            >
+              ▲ {vote === 1 ? "Liked" : "Like"}
+            </button>
+            <button
+              type="button"
+              className={`action-btn vote-down ${vote === -1 ? "active" : ""}`}
+              onClick={() => setVoteValue(vote === -1 ? 0 : -1)}
+              aria-label="Thumbs down"
+            >
+              ▼ {vote === -1 ? "Disliked" : "Dislike"}
+            </button>
+          </div>
           <div className="stars" aria-label={`${rating} of 5 stars`}>
             {[1, 2, 3, 4, 5].map((value) => (
               <button
@@ -121,6 +180,48 @@ export function TrackExperience({
             <button type="submit" aria-label="Submit tag">＋</button>
           </form>
           {message && <p role="status">{message}</p>}
+        </div>
+      </section>
+
+      {track.downloadEnabled && track.downloadUrl && (
+        <section className="track-download">
+          <h3>Download</h3>
+          <a 
+            href={track.downloadUrl} 
+            download
+            className="download-button"
+            style={{ background: track.personaColor }}
+          >
+            Download {track.downloadFormat?.toUpperCase() || "Audio"}
+            {track.downloadSizeBytes && ` (${(track.downloadSizeBytes / 1024 / 1024).toFixed(1)} MB)`}
+          </a>
+          {track.license && (
+            <p className="license-info">
+              License: {track.license}
+            </p>
+          )}
+        </section>
+      )}
+
+      <section className="track-share">
+        <h3>Share</h3>
+        <div className="share-buttons">
+          <button
+            type="button"
+            onClick={() => {
+              if (navigator.share) {
+                navigator.share({
+                  title: `${track.title} — ${track.personaName}`,
+                  url: window.location.href,
+                });
+              } else {
+                navigator.clipboard.writeText(window.location.href);
+                setMessage("Link copied to clipboard.");
+              }
+            }}
+          >
+            Share Track
+          </button>
         </div>
       </section>
     </>

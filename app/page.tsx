@@ -21,21 +21,43 @@ function StarRow({ value, onChange, compact = false }: { value: number; onChange
 export default function Home() {
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
   const [filter, setFilter] = useState("all");
+  const [view, setView] = useState<"top" | "all">("top");
   const [ratings, setRatings] = useState<Record<number, number>>({});
+  const [preferences, setPreferences] = useState<Record<number, { favorite: boolean; vote: number }>>({});
   const [userTags, setUserTags] = useState<Record<number, string[]>>({});
   const [tagDraft, setTagDraft] = useState("");
   const [currentTrackId, setCurrentTrackId] = useState<number | null>(null);
   const { playTrack, currentTrack } = useAudioPlayer();
+  const [userId] = useState<string | null>(getOrCreateAnonymousUserId());
 
   useEffect(() => {
-    fetch("/api/catalog")
+    const params = new URLSearchParams();
+    params.append("view", view);
+    if (userId) params.append("userId", userId);
+    
+    fetch(`/api/catalog?${params.toString()}`)
       .then((res) => {
         if (!res.ok) throw new Error("Catalog request failed");
         return res.json() as Promise<CatalogData>;
       })
-      .then(setCatalog)
+      .then((data) => {
+        setCatalog(data);
+        // Extract user preferences from tracks
+        const prefs: Record<number, { favorite: boolean; vote: number }> = {};
+        const userRatings: Record<number, number> = {};
+        data.tracks.forEach((track) => {
+          if (track.favorite !== undefined || track.vote !== undefined) {
+            prefs[track.id] = { favorite: track.favorite, vote: track.vote };
+          }
+          if (track.rating !== undefined) {
+            userRatings[track.id] = track.rating;
+          }
+        });
+        setPreferences(prefs);
+        setRatings(userRatings);
+      })
       .catch(console.error);
-  }, []);
+  }, [view, userId]);
 
   const personas = catalog?.personas || [];
   const allPersonaOption = { name: "All transmissions", slug: "all", primaryColor: "#e8e2d8", sortOrder: -1 };
@@ -62,6 +84,23 @@ export default function Home() {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ trackId, userId, rating }),
+    }).catch(() => undefined);
+  }
+
+  async function savePreference(trackId: number, favorite?: boolean, vote?: number) {
+    const userId = getOrCreateAnonymousUserId();
+    if (!userId) return;
+    setPreferences((state) => ({
+      ...state,
+      [trackId]: { 
+        favorite: favorite !== undefined ? favorite : (state[trackId]?.favorite ?? false),
+        vote: vote !== undefined ? vote : (state[trackId]?.vote ?? 0),
+      },
+    }));
+    fetch("/api/preferences", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ trackId, userId, favorite, vote }),
     }).catch(() => undefined);
   }
 
@@ -157,15 +196,31 @@ export default function Home() {
       <section className="archive">
         <div className="section-heading">
           <div>
-            <span>THE CURRENT</span>
+            <span>{view === "top" ? "TOP FAVORITES" : "THE CURRENT"}</span>
             <h2>
-              RECENT<br />
-              TRANSMISSIONS
+              {view === "top" ? "COMMUNITY" : "RECENT"}<br />
+              {view === "top" ? "HIGHLIGHTS" : "TRANSMISSIONS"}
             </h2>
+          </div>
+          <div className="view-toggle">
+            <button
+              type="button"
+              className={view === "top" ? "active" : ""}
+              onClick={() => setView("top")}
+            >
+              Top Favorites
+            </button>
+            <button
+              type="button"
+              className={view === "all" ? "active" : ""}
+              onClick={() => setView("all")}
+            >
+              Explore All
+            </button>
           </div>
           <p>
             {String(visibleTracks.length).padStart(2, "0")} ARTIFACTS<br />
-            UPDATED WEEKLY
+            {view === "top" ? "COMMUNITY RANKED" : "UPDATED WEEKLY"}
           </p>
         </div>
 
@@ -194,6 +249,32 @@ export default function Home() {
                 {track.curatorTags?.split(";").slice(0, 2).filter(Boolean).map((tag) => (
                   <span key={tag}>#{tag}</span>
                 ))}
+              </div>
+              <div className="track-actions">
+                <button
+                  type="button"
+                  className={`action-btn favorite ${preferences[track.id]?.favorite ? "active" : ""}`}
+                  onClick={() => savePreference(track.id, !preferences[track.id]?.favorite)}
+                  aria-label={preferences[track.id]?.favorite ? "Remove from favorites" : "Add to favorites"}
+                >
+                  ♥
+                </button>
+                <button
+                  type="button"
+                  className={`action-btn vote-up ${preferences[track.id]?.vote === 1 ? "active" : ""}`}
+                  onClick={() => savePreference(track.id, undefined, preferences[track.id]?.vote === 1 ? 0 : 1)}
+                  aria-label="Thumbs up"
+                >
+                  ▲
+                </button>
+                <button
+                  type="button"
+                  className={`action-btn vote-down ${preferences[track.id]?.vote === -1 ? "active" : ""}`}
+                  onClick={() => savePreference(track.id, undefined, preferences[track.id]?.vote === -1 ? 0 : -1)}
+                  aria-label="Thumbs down"
+                >
+                  ▼
+                </button>
               </div>
               <StarRow
                 compact
