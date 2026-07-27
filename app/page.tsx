@@ -27,7 +27,7 @@ export default function Home() {
   const [userTags, setUserTags] = useState<Record<number, string[]>>({});
   const [tagDraft, setTagDraft] = useState("");
   const [currentTrackId, setCurrentTrackId] = useState<number | null>(null);
-  const { playTrack, currentTrack } = useAudioPlayer();
+  const { playQueue, currentTrack } = useAudioPlayer();
   const [userId] = useState<string | null>(getOrCreateAnonymousUserId());
 
   useEffect(() => {
@@ -129,15 +129,19 @@ export default function Home() {
   function chooseTrack(track: typeof visibleTracks[0]) {
     setCurrentTrackId(track.id);
     if (!track.publicUrl) return;
-    playTrack({
-      id: track.id,
-      title: track.title,
-      personaName: track.personaName,
-      personaColor: track.personaColor,
-      publicUrl: track.publicUrl,
-      duration: track.duration,
-      versionId: track.versionId,
-    });
+    const queue = visibleTracks
+      .filter((item) => item.publicUrl)
+      .map((item) => ({
+        id: item.id,
+        title: item.title,
+        personaName: item.personaName,
+        personaColor: item.personaColor,
+        publicUrl: item.publicUrl as string,
+        duration: item.duration,
+        versionId: item.versionId,
+      }));
+    const startIndex = queue.findIndex((item) => item.id === track.id);
+    playQueue(queue, Math.max(0, startIndex));
   }
 
   if (!catalog) {

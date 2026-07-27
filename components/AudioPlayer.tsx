@@ -21,6 +21,7 @@ type PlayerState = {
   volume: number;
   error: string | null;
   queue: PlayerTrack[];
+  originalQueue: PlayerTrack[];
   queueIndex: number;
   isShuffled: boolean;
 };
@@ -51,6 +52,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     volume: 1,
     error: null,
     queue: [],
+    originalQueue: [],
     queueIndex: 0,
     isShuffled: false,
   });
@@ -76,20 +78,14 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
         if (shouldAdvance) {
           return {
             ...previous,
-            isPlaying: false,
-            progress: 100,
+            progress: 0,
+            currentTime: 0,
             queueIndex: previous.queueIndex + 1,
             currentTrack: previous.queue[previous.queueIndex + 1],
+            isPlaying: true,
           };
         }
         return { ...previous, isPlaying: false, progress: 100 };
-      });
-      // Auto-advance to next track in queue
-      setState((previous) => {
-        if (previous.isPlaying) {
-          audioRef.current?.play();
-        }
-        return previous;
       });
     };
     const handleError = () => {
@@ -178,6 +174,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       currentTime: 0,
       error: null,
       queue: [track],
+      originalQueue: [track],
       queueIndex: 0,
     }));
   }
@@ -202,6 +199,7 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
       currentTime: 0,
       error: null,
       queue: tracks,
+      originalQueue: tracks,
       queueIndex: startIndex,
       isShuffled: false,
     }));
@@ -219,40 +217,45 @@ export function AudioPlayerProvider({ children }: { children: ReactNode }) {
     }
     setState((previous) => ({
       ...previous,
+      originalQueue: tracks,
       queue: shuffled,
       queueIndex: 0,
+      currentTrack: shuffled[0],
+      isPlaying: true,
+      progress: 0,
+      currentTime: 0,
+      error: null,
       isShuffled: true,
     }));
-    // Play the first track in the shuffled queue
-    if (shuffled[0]) {
-      setState((previous) => ({
-        ...previous,
-        currentTrack: shuffled[0],
-        isPlaying: true,
-        progress: 0,
-        currentTime: 0,
-        error: null,
-      }));
-    }
   }
 
   function toggleShuffle() {
-    if (state.isShuffled) {
-      // Restore original order
-      setState((previous) => ({
+    setState((previous) => {
+      if (previous.queue.length === 0) return previous;
+      if (previous.isShuffled) {
+        const restoredIndex = previous.currentTrack
+          ? Math.max(0, previous.originalQueue.findIndex((track) => track.id === previous.currentTrack?.id))
+          : 0;
+        return {
+          ...previous,
+          queue: previous.originalQueue,
+          queueIndex: restoredIndex,
+          isShuffled: false,
+        };
+      }
+
+      const shuffled = [...previous.queue].sort(() => Math.random() - 0.5);
+      const shuffledIndex = previous.currentTrack
+        ? Math.max(0, shuffled.findIndex((track) => track.id === previous.currentTrack?.id))
+        : 0;
+      return {
         ...previous,
-        isShuffled: false,
-      }));
-    } else if (state.queue.length > 0) {
-      // Shuffle current queue
-      const shuffled = [...state.queue].sort(() => Math.random() - 0.5);
-      setState((previous) => ({
-        ...previous,
+        originalQueue: previous.queue,
         queue: shuffled,
-        queueIndex: 0,
+        queueIndex: shuffledIndex,
         isShuffled: true,
-      }));
-    }
+      };
+    });
   }
 
   function nextTrack() {

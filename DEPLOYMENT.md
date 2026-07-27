@@ -215,6 +215,7 @@ In the Worker configuration:
 - Bind D1 database `the-archive-db` as `DB`.
 - Bind R2 bucket `the-archive-media` as `R2`.
 - Set `NEXT_PUBLIC_SITE_URL` to the final HTTPS application origin.
+- Set `CURATOR_API_TOKEN` to a long random secret. This protects the annual-candidate report and the approved Obsidian manifest import endpoint.
 - Attach the final custom domain when ready.
 
 The public site URL is used for sitemap and canonical metadata. It is not a secret.
